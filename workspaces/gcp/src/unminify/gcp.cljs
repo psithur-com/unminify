@@ -49,41 +49,36 @@
 
 (defn- send-to-error-reporting!
   "Repots an error via error reporting."
-  [{:keys [headers service version user-id
-           remote-ip]} stacktrace]
+  [stacktrace user userAgent service version url]
   (let [errors (er/ErrorReporting. #js {:reportMode "always"})
         error-msg (doto (.event errors)
                     (.setMessage stacktrace)
-                    (.setReferrer (goog.object/get headers "user-agent"))
-                    (.setRemoteIp (goog.object/get headers "x-forwarded-for" remote-ip))
+                    (.setUser user)
+                    (.setUserAgent userAgent)
                     (.setServiceContext service version)
-                    (.setUser user-id)
-                    (.setUserAgent (goog.object/get headers "user-agent")))]
+                    (.setUrl url))]
     (.report errors error-msg)))
+
 
 (defn report-unminified!
   "Unminifies the `stacktrace` and reports it to error reporting."
-  [{:keys [stacktrace
-           version
-           service
-           bucket
-           filename
-           debug?] :as args}]
-  (when debug?
-    (js/console.debug (pr-str args)))
-  (assert version)
-  (assert bucket)
-  (assert stacktrace)
-  (assert service)
-  (assert filename)
-  (let [remote-file (remote-filename filename version)
+  [filename bucket
+   {:keys [serviceContext context message]}]
+  (let [
+        {:keys [service version]} serviceContext
+        {:keys [user httpRequest]} context
+        {:keys [userAgent url]} httpRequest
+        
+        
+        remote-file (remote-filename filename version)
         {:keys [dir file]} (gen-destination)]
+
     (p/let [_ (download! {:bucket bucket
                           :file remote-file
                           :destination file})
-            legible (unminify/unminify {:stacktrace stacktrace
-                                        :source-map file})]
-      (send-to-error-reporting! args legible)
+            stacktrace (unminify/unminify {:stacktrace message
+                                           :source-map file})]
+      (send-to-error-reporting!  stacktrace user userAgent service version url)
       (fs/rm dir #js {:force true :recursive true} identity))))
 
 
@@ -134,14 +129,13 @@
 
 (defn body-parser
   [req _res next]
-  (let [ct (.header req "content-type")
+  (assert (clojure.string/starts-with? 
+            (.header req "content-type")
+            "application/json"))
+  (let [
+        ct (.header req "content-type")
         body (some-> (.-body req) strip-byte-order-mark)
-        parser (case ct
-                 "application/json" parse-json
-                 "application/edn" edn/read-string
-                 ;; "application/transit+json" parse-transit
-                 identity)
-        parsed (parser body)]
+        parsed (parse-json body)]
     (goog.object/set req "body" parsed)
     (next)))
 
@@ -172,8 +166,8 @@
                      :credentials cors-credentials?
                      :maxAge cors-max-age
                      :optionsSuccessStatus 204}
-                     clj->js
-                     cors)]
+                    clj->js
+                    cors)]
 
     (doto app
       (.disable "x-powered-by")
