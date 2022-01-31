@@ -43,7 +43,7 @@
   [filename version]
   (let [filename (if (str/starts-with? filename "/")
                    (subs filename 1)
-                   (filename))]
+                   filename)]
     (str/replace filename "${version}" version)))
 
 
@@ -62,14 +62,14 @@
 
 (defn report-unminified!
   "Unminifies the `stacktrace` and reports it to error reporting."
-  [filename bucket
-   {:keys [serviceContext context message]}]
+  [{:keys [serviceContext context message filename bucket]}]
+  (prn filename)
+  (prn bucket)
   (let [
         {:keys [service version]} serviceContext
         {:keys [user httpRequest]} context
         {:keys [userAgent url]} httpRequest
-        
-        
+
         remote-file (remote-filename filename version)
         {:keys [dir file]} (gen-destination)]
 
