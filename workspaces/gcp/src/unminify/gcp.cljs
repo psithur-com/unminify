@@ -57,14 +57,14 @@
                     (.setUserAgent userAgent)
                     (.setServiceContext service version)
                     (.setUrl url))]
-    (.report errors error-msg)))
+    (prn (.report errors error-msg))))
+
+    
 
 
 (defn report-unminified!
   "Unminifies the `stacktrace` and reports it to error reporting."
   [{:keys [serviceContext context message filename bucket]}]
-  (prn filename)
-  (prn bucket)
   (let [
         {:keys [service version]} serviceContext
         {:keys [user httpRequest]} context
